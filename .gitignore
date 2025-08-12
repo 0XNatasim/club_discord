@@ -1,9 +1,4 @@
-# Ignore everything
-*
-
-# But not this file
-!verify.html
-!.gitignore
+.env
 
 
 
