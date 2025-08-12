@@ -1,133 +1,115 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Wallet Verify — ENS Club</title>
-  <style>
-    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 2rem; background:#0f172a; color:#e6eef8; }
-    .card { max-width:720px; margin:2rem auto; padding:1.6rem; border-radius:12px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); box-shadow:0 6px 24px rgba(2,6,23,0.6); }
-    h1 { margin:0 0 0.5rem 0; font-size:1.4rem; }
-    p { margin:0.25rem 0 1rem 0; color:#cbd5e1; }
-    button { cursor:pointer; padding:0.6rem 1rem; border-radius:8px; border:0; background:#06b6d4; color:#012; font-weight:600; }
-    pre { background:#071029; padding:0.8rem; border-radius:8px; overflow:auto; color:#9ee7ff; }
-    .muted { color:#94a3b8; font-size:0.9rem; }
-    footer { margin-top:1.2rem; font-size:0.85rem; color:#94a3b8; }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+    <meta charset="UTF-8">
+    <title>ENS Club Verification</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1.1rem;
+            background: #4cafef;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .error {
+            color: #d33;
+        }
+        .success {
+            color: #2c9c2c;
+        }
+    </style>
 </head>
 <body>
-  <div class="card" id="app">
-    <h1>ENS Club — Wallet Verification</h1>
-    <p class="muted">This page requests a signature with MetaMask to verify wallet ownership. It will send the signature to your backend to complete verification.</p>
+    <h2>ENS Club Verification</h2>
+    <p>Click below to connect MetaMask and verify your wallet.</p>
+    <button id="verifyBtn">Verify with MetaMask</button>
+    <div class="status" id="status"></div>
 
-    <div id="status">
-      <p><strong>Step 1:</strong> Open this page from the link the bot gave you.</p>
-      <p id="info" class="muted">Waiting for input...</p>
-    </div>
+    <script>
+        const queryParams = new URLSearchParams(window.location.search);
+        const discordId = queryParams.get("id");
+        const verifyBtn = document.getElementById("verifyBtn");
+        const statusDiv = document.getElementById("status");
 
-    <div style="margin-top:1rem;">
-      <button id="startBtn">Start verification</button>
-      <button id="retryBtn" style="display:none;margin-left:0.8rem;background:#f97316">Retry</button>
-    </div>
-
-    <pre id="log" style="margin-top:1rem; height:200px;">Log window...</pre>
-
-    <footer>Make sure MetaMask is installed and unlocked in this browser.</footer>
-  </div>
-
-  <script>
-  (async function () {
-    // CONFIG: Replace backend URL with your actual backend public URL if using a different domain.
-    const BACKEND_BASE_URL = "https://YOUR_BACKEND_DOMAIN"; // <-- CHANGE THIS
-
-    const params = new URLSearchParams(window.location.search);
-    const discordId = params.get("id") || params.get("discordId") || params.get("discord") || null;
-
-    const logEl = document.getElementById("log");
-    const infoEl = document.getElementById("info");
-    const startBtn = document.getElementById("startBtn");
-    const retryBtn = document.getElementById("retryBtn");
-
-    function log(...args) {
-      const now = new Date().toISOString();
-      logEl.textContent = `${now} — ${args.map(a => (typeof a === 'object' ? JSON.stringify(a,null,2) : String(a))).join(" ")}\n` + logEl.textContent;
-    }
-
-    if (!discordId) {
-      infoEl.textContent = "No Discord ID found in URL. Use the link: https://.../?id=DISCORD_ID";
-      log("ERROR: missing discord id in URL.");
-      startBtn.disabled = true;
-      return;
-    }
-
-    startBtn.addEventListener("click", doVerify);
-    retryBtn.addEventListener("click", doVerify);
-
-    async function doVerify() {
-      startBtn.disabled = true;
-      retryBtn.style.display = "none";
-      infoEl.textContent = "Connecting to MetaMask and requesting nonce...";
-      log("Starting verification for discordId=", discordId);
-
-      if (!window.ethereum) {
-        infoEl.textContent = "No Ethereum provider (MetaMask) detected.";
-        log("No window.ethereum");
-        retryBtn.style.display = "";
-        startBtn.disabled = false;
-        return;
-      }
-
-      try {
-        // Request nonce from backend
-        const nonceResp = await fetch(`${BACKEND_BASE_URL}/request-nonce?discordId=${encodeURIComponent(discordId)}`, { method: "GET" });
-        if (!nonceResp.ok) throw new Error("Failed to get nonce: " + nonceResp.status);
-        const { nonce, message } = await nonceResp.json();
-        log("Nonce received:", nonce);
-
-        // Request accounts
-        await window.ethereum.request({ method: "eth_requestAccounts" });
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const address = await signer.getAddress();
-        log("Connected address:", address);
-
-        // Compose the message — backend controls nonce/message
-        const textToSign = message || `Sign this message to verify ownership. Nonce: ${nonce}`;
-        log("Message to sign:", textToSign);
-
-        const signature = await signer.signMessage(textToSign);
-        log("Signature generated:", signature);
-
-        // Submit signature to backend
-        infoEl.textContent = "Submitting signature to backend...";
-        const submitResp = await fetch(`${BACKEND_BASE_URL}/submit-signature`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ discordId, address, signature })
-        });
-
-        if (!submitResp.ok) {
-          const body = await submitResp.text();
-          throw new Error("Verification failed: " + submitResp.status + " " + body);
+        if (!discordId) {
+            statusDiv.innerHTML = "<span class='error'>Missing Discord ID in URL</span>";
+            verifyBtn.disabled = true;
         }
 
-        const result = await submitResp.json();
-        log("Verification result:", result);
-        infoEl.textContent = "✅ Verification submitted. If valid, the bot will assign your role shortly.";
-        startBtn.style.display = "none";
-      } catch (err) {
-        console.error(err);
-        log("ERROR:", err.message || err);
-        infoEl.textContent = "⚠️ Error: " + (err.message || err);
-        retryBtn.style.display = "";
-        startBtn.disabled = false;
-      }
-    }
+        async function verifyWallet() {
+            try {
+                if (!window.ethereum) {
+                    statusDiv.innerHTML = "<span class='error'>MetaMask not detected</span>";
+                    return;
+                }
 
-    // auto-start small UX convenience (optional)
-    // startBtn.click();
-  })();
-  </script>
+                verifyBtn.disabled = true;
+                statusDiv.textContent = "Connecting to MetaMask...";
+
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+                const address = accounts[0];
+
+                // Step 1: Request nonce from server
+                const nonceRes = await fetch(`/request-nonce?discordId=${discordId}`);
+                if (!nonceRes.ok) throw new Error("Failed to get nonce");
+                const { message } = await nonceRes.json();
+
+                // Step 2: Sign nonce
+                statusDiv.textContent = "Please sign the message in MetaMask...";
+                const signature = await ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, address]
+                });
+
+                // Step 3: Send signature to server
+                statusDiv.textContent = "Verifying ownership...";
+                const sigRes = await fetch(`/submit-signature`, {
+                    method: 'POST',
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        discordId,
+                        address,
+                        signature
+                    })
+                });
+
+                const sigData = await sigRes.json();
+
+                if (sigRes.ok && sigData.ok) {
+                    statusDiv.innerHTML = `<span class='success'>✅ Verified! You now have access in Discord.</span>`;
+                } else {
+                    throw new Error(sigData.error || "Verification failed");
+                }
+
+            } catch (err) {
+                console.error(err);
+                statusDiv.innerHTML = `<span class='error'>❌ ${err.message}</span>`;
+            } finally {
+                verifyBtn.disabled = false;
+            }
+        }
+
+        verifyBtn.addEventListener("click", verifyWallet);
+    </script>
 </body>
 </html>
