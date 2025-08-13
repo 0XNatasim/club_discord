@@ -4,9 +4,12 @@ import os
 ALCHEMY_KEY = os.getenv("ALCHEMY_KEY")
 PARENT_NODE = os.getenv("PARENT_NODE")
 
+ENS_WRAPPER_NFT_CONTRACT = "0xd4416b13d2b3a9abae7acd5d6c2bbdbe25686401"
+
 def owns_ens_subdomain(address: str) -> bool:
     """
-    Check via Alchemy if the wallet owns any ENS subdomain of the given parent node.
+    Check via Alchemy if the wallet owns any ENS subdomain of the configured parent node,
+    using the ENS Name Wrapper ERC-1155 contract.
     """
     url = f"https://eth-mainnet.g.alchemy.com/nft/v2/{ALCHEMY_KEY}/getNFTs"
     params = {
@@ -22,11 +25,13 @@ def owns_ens_subdomain(address: str) -> bool:
 
         for nft in data.get("ownedNfts", []):
             contract_address = nft.get("contract", {}).get("address", "").lower()
-            # ENS contract address is 0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85
-            if contract_address == "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85":
-                # Optionally check tokenId starts with parent node
-                token_id = nft.get("id", {}).get("tokenId", "").lower()
-                if token_id.startswith(PARENT_NODE[2:].lower()):
+            token_id = nft.get("id", {}).get("tokenId", "").lower()
+
+            # Check ENS Name Wrapper contract
+            if contract_address == ENS_WRAPPER_NFT_CONTRACT:
+                # Token ID is a 256-bit hex string (subdomain nodehash)
+                # Check if the last 64 chars match PARENT_NODE (without the '0x')
+                if token_id[-64:] == PARENT_NODE[2:].lower():
                     return True
         return False
 
